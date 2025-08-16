@@ -1,0 +1,273 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          UserRole  @default(EMPLOYEE)
+  companyId     String?
+  employeeId    String?   @unique
+  department    String?
+  position      String?
+  hireDate      DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  company            Company?           @relation(fields: [companyId], references: [id])
+  accounts           Account[]
+  sessions           Session[]
+  attendanceRecords  Attendance[]
+  hrRequests         HRRequest[]
+  managedRequests    HRRequest[]        @relation("ManagerRequests")
+  performanceReviews PerformanceReview[]
+  managedReviews     PerformanceReview[] @relation("ManagerReviews")
+  notifications      Notification[]
+  approvals          RequestApproval[]
+}
+
+model Company {
+  id                String        @id @default(cuid())
+  name              String
+  email             String?
+  phone             String?
+  address           String?
+  industry          String?
+  establishedDate   DateTime?
+  isActive          Boolean       @default(true)
+  subscriptionType  String        @default("basic")
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  employees         User[]
+  hrRequests        HRRequest[]
+  subscriptions     Subscription[]
+  complianceReports ComplianceReport[]
+}
+
+model HRRequest {
+  id          String        @id @default(cuid())
+  type        RequestType
+  title       String
+  description String?
+  status      RequestStatus @default(PENDING)
+  priority    Priority      @default(MEDIUM)
+  startDate   DateTime?
+  endDate     DateTime?
+  documents   String?       // JSON string for document URLs
+  comments    String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  employeeId String
+  employee   User    @relation(fields: [employeeId], references: [id])
+  managerId  String?
+  manager    User?   @relation("ManagerRequests", fields: [managerId], references: [id])
+  companyId  String
+  company    Company @relation(fields: [companyId], references: [id])
+
+  approvals RequestApproval[]
+}
+
+model RequestApproval {
+  id        String         @id @default(cuid())
+  status    ApprovalStatus
+  comments  String?
+  createdAt DateTime       @default(now())
+
+  requestId String
+  request   HRRequest @relation(fields: [requestId], references: [id])
+  approverId String
+  approver   User     @relation(fields: [approverId], references: [id])
+}
+
+model Attendance {
+  id        String          @id @default(cuid())
+  date      DateTime
+  checkIn   DateTime?
+  checkOut  DateTime?
+  status    AttendanceStatus @default(PRESENT)
+  notes     String?
+  location  String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  employeeId String
+  employee   User   @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, date])
+}
+
+model PerformanceReview {
+  id          String       @id @default(cuid())
+  type        ReviewType
+  rating      Int?         // 1-5 scale
+  comments    String
+  goals       String?      // JSON string for goals
+  achievements String?     // JSON string for achievements
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  employeeId String
+  employee   User   @relation(fields: [employeeId], references: [id])
+  managerId  String
+  manager    User   @relation("ManagerReviews", fields: [managerId], references: [id])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model Subscription {
+  id          String            @id @default(cuid())
+  packageType SubscriptionType
+  startDate   DateTime
+  endDate     DateTime?
+  isActive    Boolean           @default(true)
+  features    String?           // JSON string for features
+  price       Float?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+}
+
+model ComplianceReport {
+  id                    String   @id @default(cuid())
+  reportType            String
+  saudizationRatio      Float?
+  complianceScore       Float?
+  violationsCount       Int      @default(0)
+  expiringDocuments     String?  // JSON string
+  requiredCorrections   String?  // JSON string
+  monthlyCost          Float?
+  yearlyCost           Float?
+  dailyCost            Float?
+  createdAt            DateTime @default(now())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+}
+
+// Enums
+enum UserRole {
+  EMPLOYEE
+  MANAGER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum RequestType {
+  LEAVE
+  EXIT_REENTRY
+  SPONSORSHIP_TRANSFER
+  DOCUMENT_REQUEST
+  SALARY_CERTIFICATE
+  VACATION
+  SICK_LEAVE
+  MATERNITY_LEAVE
+  OTHER
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  WORK_FROM_HOME
+}
+
+enum ReviewType {
+  REWARD
+  WARNING
+  PERFORMANCE_REVIEW
+  GOAL_SETTING
+  FEEDBACK
+}
+
+enum NotificationType {
+  HR_REQUEST
+  ATTENDANCE
+  PERFORMANCE
+  COMPLIANCE
+  SYSTEM
+  REMINDER
+}
+
+enum SubscriptionType {
+  BASIC
+  STANDARD
+  PREMIUM
+  ENTERPRISE
+}
